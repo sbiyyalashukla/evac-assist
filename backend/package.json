@@ -1,0 +1,21 @@
+{
+  "name": "evac-assist-services",
+  "version": "1.0.0",
+  "description": "Single Lambda function to handle evacuation assistance actions and persist to DynamoDB",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "jest",
+    "deploy": "sam deploy --guided",
+    "build": "sam build"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.620.0",
+    "@aws-sdk/lib-dynamodb": "3.620.0",
+    "uuid": "9.0.1"
+  },
+  "devDependencies": {
+    "jest": "29.7.0"
+  },
+  "keywords": ["evacuation", "lambda", "dynamodb"],
+  "license": "MIT"
+}

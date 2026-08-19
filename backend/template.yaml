@@ -1,0 +1,138 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Evacuation Assistance Services - Single Lambda for all evacuation actions
+
+Globals:
+  Function:
+    Timeout: 10
+    Runtime: nodejs20.x
+    MemorySize: 128
+
+Resources:
+  # Table 1: All evacuation actions go here
+  EvacuationActionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: EvacuationActions
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: emergencyId
+          AttributeType: S
+        - AttributeName: uid
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: emergencyId-uid-index
+          KeySchema:
+            - AttributeName: emergencyId
+              KeyType: HASH
+            - AttributeName: uid
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: emergencyId-timestamp-index
+          KeySchema:
+            - AttributeName: emergencyId
+              KeyType: HASH
+            - AttributeName: timestamp
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  # Table 2: Mobility assistance requests (linked to EvacuationActions via actionId)
+  MobilityAssistanceRequestsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: MobilityAssistanceRequests
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: requestId
+          AttributeType: S
+        - AttributeName: emergencyId
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+      KeySchema:
+        - AttributeName: requestId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: emergencyId-status-index
+          KeySchema:
+            - AttributeName: emergencyId
+              KeyType: HASH
+            - AttributeName: status
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  # Table 3: Evacuation maps and guidelines (queried by Guide to Evacuate Area)
+  EvacuationMapsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: EvacuationMaps
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: emergencyId
+          AttributeType: S
+        - AttributeName: location
+          AttributeType: S
+      KeySchema:
+        - AttributeName: emergencyId
+          KeyType: HASH
+        - AttributeName: location
+          KeyType: RANGE
+
+  # Lambda function
+  EvacActionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: evac-assist-action-handler
+      Handler: src/index.handler
+      CodeUri: .
+      Description: Handles all evacuation assistance actions and persists to DynamoDB
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref EvacuationActionsTable
+          MOBILITY_TABLE_NAME: !Ref MobilityAssistanceRequestsTable
+          MAPS_TABLE_NAME: !Ref EvacuationMapsTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref EvacuationActionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MobilityAssistanceRequestsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref EvacuationMapsTable
+      Events:
+        PostAction:
+          Type: Api
+          Properties:
+            Path: /action
+            Method: POST
+        OptionsAction:
+          Type: Api
+          Properties:
+            Path: /action
+            Method: OPTIONS
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL for the evacuation action
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/action"
+  FunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt EvacActionFunction.Arn
+  EvacuationActionsTableName:
+    Description: EvacuationActions DynamoDB table name
+    Value: !Ref EvacuationActionsTable
+  MobilityAssistanceTableName:
+    Description: MobilityAssistanceRequests DynamoDB table name
+    Value: !Ref MobilityAssistanceRequestsTable
+  EvacuationMapsTableName:
+    Description: EvacuationMaps DynamoDB table name
+    Value: !Ref EvacuationMapsTable
